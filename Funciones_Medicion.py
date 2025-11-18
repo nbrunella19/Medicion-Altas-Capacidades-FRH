@@ -243,7 +243,140 @@ def Procesamiento_CargayDescarga(Ruta_Medicion_Carga_Descarga,Medicion_Capacitor
 
 ##################################################################################################################################################################
 ##################################################################################################################################################################
+def Procesamiento_Curva(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp):
+    """
+    Entrada: Ruta del archivo de medición, Vector de muestras, Valor máximo de tensión del generador, Tiempo entre muestras,
+              Valor de resistencia patrón, Resistencia del cable del generador.
+    Retorna: Vector de capacidades calculadas, vectores de parámetros de la linealización, cantidad de ciclos válidos,
+    Función: Procesa los datos de medición de tensión en la carga del capacitor para calcular su valor nominal y la incertidumbre asociada.
+    """
+    
+    # Inicializa vectores de resultados
+    Muestras_Filtradas              = []  
+    muestrasdeinicio                = []  # Almacenará los números de muestra del inicio de cada carga
+    muestrasdefin                   = []  # Almacenará los números de muestra de final de cada carga
+    Numero_de_Muestras_Filtradas    = []
+    slope_vector                    = []   
+    intercept_vector                = []
+    r_value_vector                  = []
+    p_value_vector                  = []
+    std_err_vector                  = []
+    
+    V_offset                        = 0.0 
+    R_Cuadrado                      = 0.999
+    Indice                          = 0  
+    cargando                        = False  # Bandera para identificar si estamos en una carga
+    enganche                        = False
+    
+    V_dig            = V_max* 0.6321205588  
+    valor_inicial    = 0.01 * V_max 
+    valor_final      = 0.99 * V_max  
+    
+    print(f"Valor inicial de disparo: {valor_inicial} V")
+    print(f"Valor final de disparo: {valor_final} V")
 
+     
+    with open(Ruta_Medicion_Carga_Descarga, 'r') as f:
+        Mediciones = []
+        for linea in f:
+            try:
+                valor = float(linea.strip())
+                Mediciones.append(valor)
+            except ValueError:
+                # Si la línea no puede convertirse, la ignoramos (puede ser texto del encabezado)
+                continue
+    
+
+    for i, valor in enumerate(Mediciones, start=1):   
+        
+        # Si no fue disparado, no está cargando y el valor es superior al mínimo disparo
+        if not enganche and not cargando and valor <= valor_inicial:
+            enganche = True
+        # Una vez que se sincronizo con un cero analizo cuando sale del mismo.
+        if not cargando and enganche and valor >= valor_inicial:
+        # Detecta el inicio de una carga
+            muestrasdeinicio.append(i)
+            cargando = True
+        #Va a cargar y adquirir datos hasta que llegue al final.
+        elif cargando and valor >= valor_final:
+        # Detectar el final de una carga
+            muestrasdefin.append(i)
+            cargando = False
+            enganche = False
+
+   
+    Cantidad_inicios = len(muestrasdeinicio)
+    Cantidad_finales = len(muestrasdefin)
+    
+    #Si la cantidad de inicios y finales fuesen distintos tomaria el de menor valor 'n'
+    Cantidad_ciclos  = min(Cantidad_inicios, Cantidad_finales)
+    
+    #Tomo finalmente los primeros 'n' valores
+    muestrasdeinicio = muestrasdeinicio[:Cantidad_ciclos]
+    muestrasdefin    = muestrasdefin[:Cantidad_ciclos]
+
+    Muestras_de_Ciclo        =[0]*Cantidad_ciclos 
+    Muestras_de_Ciclo_Lin    =[0]*Cantidad_ciclos 
+    Num_Muestras_de_Ciclo    =[0]*Cantidad_ciclos 
+
+
+    Mediciones_leidas = pd.read_csv(Ruta_Medicion_Carga_Descarga, header=None, names=['Tensión'], sep='\s+', skiprows=13)  
+    Cantidad_de_muestras= len(Mediciones_leidas)
+
+    # Genera el vector de tiempo en función del `timer`
+    Mediciones_leidas['Tiempo'] = np.arange(0, Cantidad_de_muestras * Sweep_Time, Sweep_Time)
+
+    for i in range(Cantidad_ciclos):
+    
+    # Seleccionar el rango de muestras especificado
+        Muestras_Filtradas_aux  = Mediciones_leidas.iloc[muestrasdeinicio[i]:muestrasdefin[i]]
+
+        # Filtrar los datos seleccionados para que estén entre 0.3V y 0.7V
+        Muestras_Filtradas_aux = Muestras_Filtradas_aux [
+            (Muestras_Filtradas_aux['Tensión'] >= Extremo_de_ventana_inf) & (Muestras_Filtradas_aux['Tensión'] <= Extremo_de_ventana_sup)
+            ]  
+        
+        Muestras_de_Ciclo[Indice]      = Muestras_Filtradas_aux['Tensión']
+        Num_Muestras_de_Ciclo[Indice]  = Muestras_Filtradas_aux.index  
+        
+        #Linealización los datos seleccionados
+        Muestras_de_Ciclo_Lin[Indice] = np.log(1 - (Muestras_Filtradas_aux['Tensión']-V_offset) / V_max)
+
+        # Calcular la pendiente de la curva linealizada usando una regresión lineal
+        # slope esla inversa negativa de tau
+        # intercept es el valor de y cuando x=0
+        # r_value es el coeficiente de correlación
+        # p_value es el valor p para la hipótesis nula que la pendiente es cero
+        # std_err es la desviación estándar del error de la pendiente
+        # Acá se hace la REGRESION LINEAL
+        slope, intercept, r_value, p_value, std_err= linregress(Muestras_Filtradas_aux['Tiempo'], Muestras_de_Ciclo_Lin[Indice])
+               
+        # Evalua si la medición es válida según el coeficiente de determinación R^2
+        if (r_value)**2 > R_Cuadrado:
+
+            # Si es válida, almacena los resultados    
+            slope_vector.append(slope)  
+            intercept_vector.append(intercept)
+            r_value_vector.append(r_value)
+            p_value_vector.append(p_value)
+            std_err_vector.append(std_err)
+        
+    # Obtengo el número de ciclos válidos
+    Cantidad_ciclos_validos = len(slope_vector)   
+
+    Muestras_Filtradas      = [elemento for sublista in  Muestras_Filtradas  for elemento in sublista]
+
+    # Creación del vector de capacidad sabiendo que: C = tau/R y tau = -1/slope  => C = -1/R*slope
+    Cx=[0]*Cantidad_ciclos_validos
+
+    for i in range(Cantidad_ciclos_validos):
+        Cx[i] = (-1 / float((slope_vector[i]) * float(Rp)))
+
+    #Devuelve los valores calculados para su análisis posterior
+    return Cx,slope_vector,intercept_vector,r_value_vector,std_err_vector,Cantidad_ciclos_validos,Cantidad_de_muestras,V_dig
+
+##################################################################################################################################################################
+##################################################################################################################################################################
 
 ##################################################################################################################################################################
 ##################################################################################################################################################################
@@ -259,7 +392,7 @@ def Calculo_Valor_Medio(Vector):
 ##################################################################################################################################################################
 ##################################################################################################################################################################
 
-def Calculo_Incertidumbre(Cx,slope_vector,intercept_vector,r_value_vector,std_err_vector,Cantidad_ciclos,Cantidad_de_muestras,V_dig,V_max,Vn_Cx,Vn_Rp):
+def Calculo_Incertidumbre(slope_vector,intercept_vector,std_err_vector,Cantidad_ciclos,V_dig,V_max,Vn_Cx,Vn_Rp):
 
     slope_promedio     = np.mean(slope_vector)
     slope_desv_est     = np.std(slope_vector)
@@ -329,7 +462,14 @@ def Mostrar_Resultados(Cx_promedio,uc,uc_porcentual,Vn_Rp,ruta_medicion_generado
     print(f"Capacidad promedio (Cx)      : {round(Cx_promedio*1e6,6)} uF")
     print(f"Incertidumbre combinada      : {round(uc,7)} uF")
     print(f"Incertidumbre combinada en % : {round(uc_porcentual,5)} %")
+##################################################################################################################################################################
 
+def Mostrar_Resultado(Cx_promedio,uc,uc_porcentual,Vn_Rp):
+    print(f"Valor de resistencia nominal del patrón (Rp)      : {round(Vn_Rp,4)} ohm")
+    print(f"Capacidad promedio (Cx)      : {round(Cx_promedio*1e6,6)} uF")
+    print(f"Incertidumbre combinada      : {round(uc,7)} uF")
+    print(f"Incertidumbre combinada en % : {round(uc_porcentual,5)} %")
+    
 ##################################################################################################################################################################
 def Graficar(datos, sweep_time):
     """

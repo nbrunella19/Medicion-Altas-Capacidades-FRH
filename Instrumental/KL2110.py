@@ -1,15 +1,13 @@
 import pyvisa
+import time
 
 class Keithley2110:
     """
-    Clase para controlar el multímetro Keithley 2110 mediante PyVISA por USB.
+    Controlador para el multímetro Keithley 2110.
+    Incluye métodos específicos para medición sincronizada por trigger externo.
     """
 
     def __init__(self, resource_name=None):
-        """
-        Inicializa la conexión VISA.
-        Si no se proporciona 'resource_name', lista los recursos disponibles.
-        """
         self.rm = pyvisa.ResourceManager()
         if resource_name is None:
             print("Instrumentos detectados:")
@@ -17,64 +15,87 @@ class Keithley2110:
                 print(f" - {res}")
             raise ValueError("Debe especificar el resource_name del Keithley 2110.")
         self.inst = self.rm.open_resource(resource_name)
-        self.inst.timeout = 5000  # ms
+        self.inst.timeout = 5000
         self.inst.write_termination = '\n'
         self.inst.read_termination = '\n'
 
+    # ===================================================
+    # MÉTODOS BÁSICOS
+    # ===================================================
+
     def idn(self):
-        """Devuelve la identificación del instrumento."""
         return self.inst.query("*IDN?")
 
     def reset(self):
-        """Reinicia el instrumento a su configuración de encendido."""
         self.inst.write("*RST")
-        self.inst.write("*CLS")  # Limpia errores previos
-        print("Instrumento reseteado.")
+        self.inst.write("*CLS")
+        time.sleep(0.5)
 
-    def medir_tension_dc(self, rango="DEF", resolucion="DEF"):
-        """
-        Realiza una medición de tensión DC (voltaje DC).
-        Parámetros opcionales:
-        - rango: en volts o 'MIN'/'MAX'/'DEF'
-        - resolucion: en volts o 'MIN'/'MAX'/'DEF'
-        """
-        cmd = f"MEAS:VOLT:DC? {rango},{resolucion}"
-        valor = float(self.inst.query(cmd))
-        return valor
-
-    def configurar_autorango(self, estado=True):
-        """Activa o desactiva el autorango de tensión DC."""
-        estado_str = "ON" if estado else "OFF"
-        self.inst.write(f"VOLT:DC:RANG:AUTO {estado_str}")
-
-    def leer_ultimo(self):
-        """Devuelve el último valor medido sin realizar una nueva medición."""
-        return float(self.inst.query("FETCh?"))
-    
-    def configurar_trigger_externo(self, muestras=1, delay=0):
-        """
-        Configura el Keithley 2110 para usar un disparo externo.
-        - muestras: cantidad de mediciones por ciclo de disparo
-        - delay: retardo después del trigger (segundos)
-        """
-        self.inst.write("TRIG:SOUR EXT")       # Trigger externo
-        self.inst.write(f"TRIG:DEL {delay}")   # Delay post-trigger
-        self.inst.write(f"SAMP:COUN {muestras}")  # Muestras por trigger
-        print("Trigger externo configurado.")
-
-    def esperar_trigger_y_medicion(self):
-        """
-        Espera a que ocurra el trigger externo y devuelve las lecturas.
-        """
-        self.inst.write("INIT")               # Entra en modo 'wait for trigger'
-        datos = self.inst.query("FETCh?")     # Se desbloquea tras el trigger
-        return [float(x) for x in datos.split(',')]
-    
     def close(self):
-        """Cierra la conexión con el instrumento."""
         self.inst.close()
         self.rm.close()
 
+    # ===================================================
+    # CONFIGURACIONES DE MEDICIÓN
+    # ===================================================
+
+    def configurar_dc_range(self, rango=1):
+        """Configura el rango DC y valida valores permitidos."""
+        rangos_validos = [0.1, 1, 10, 100, 1000]
+
+        if rango not in rangos_validos:
+            raise ValueError(f"Rango no válido. Rangos permitidos: {rangos_validos}")
+
+        self.inst.write("VOLT:DC:RANG:AUTO OFF")
+        self.inst.write(f"VOLT:DC:RANG {rango}")
+        
+    # ===================================================
+    # MÉTODOS DE ADQUISICIÓN POR TRIGGER EXTERNO
+    # ===================================================
+    def configurar_trigger_externo(self, muestras=1):
+        """
+        Trigger externo + flanco ascendente + número de muestras por trigger.
+        """
+        self.inst.write("TRIG:SOUR EXT")      # trigger externo
+        self.inst.write("TRIG:SLOP POS")      # flanco ascendente
+        self.inst.write("TRIG:DEL 0")         # sin retraso
+        self.inst.write(f"SAMP:COUN {muestras}")
+
+    def medir_por_trigger(self):
+        """
+        Espera un trigger externo, realiza la secuencia completa
+        de SAMP:COUN mediciones y devuelve una lista de valores.
+        """
+        self.inst.write("INIT; *WAI")   # Esperar trigger y terminar adquisición
+        datos = self.inst.query("FETCh?")
+        lista = [float(x) for x in datos.split(',')]
+        return lista
+
+    def medir_n_triggers(self, n):
+        """
+        Mide N veces, esperando un trigger en cada una.
+        """
+        valores = []
+        for _ in range(n):
+            valores.append(self.medir_por_trigger())
+        return valores
+    # ===================================================
+    # VELOCIDADES DE ADQUISICIÓN
+    # ===================================================    
+    
+    def configurar_fast_mode(self):
+        """Modo rápido: máxima velocidad de muestreo (~50 lect/s)."""
+        self.inst.write("VOLT:DC:NPLC 0.02")
+
+    def configurar_normal_mode(self):
+        """Modo estándar."""
+        self.inst.write("VOLT:DC:NPLC 1")
+
+    def configurar_precise_mode(self):
+        """Modo muy preciso pero lento."""
+        self.inst.write("VOLT:DC:NPLC 10")
+        
+        
 """
 # Ejemplo de uso:
 multimetro = Keithley2110("USB0::0x05E6::0x2110::8018964::INSTR")

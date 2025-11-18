@@ -209,11 +209,7 @@ def Menu_Config():
 def Configuracion():
         
     limpiar_pantalla()
-        
-    Modo = Menu_Instrumental()
-        
-    limpiar_pantalla()
-        
+                    
     #Configura parámetros de medición en función de los vallores ingresados
     Vn_Cx, Vn_Rp, Tau_x_ciclo = Menu_Config()         
         
@@ -223,7 +219,7 @@ def Configuracion():
         
     limpiar_pantalla()
         
-    return Modo, Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time ,Cantidad_Ciclos   
+    return Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time ,Cantidad_Ciclos   
 #####################################################################################################################
 
 def Mostrar_Configuracion(Modo, Vn_Cx, Vn_Rp, Vn_Tau, Frec):
@@ -300,4 +296,15 @@ def Guardar_Medicion_Config(Ruta_Config, Modo,Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_
             json.dump(parametros, json_file, indent=4)
 
 ###################################################################################################################
-
+def Graficar_Mediciones(medicion):
+    # ===========================
+    # Graficar resultados
+    # ===========================
+    plt.figure(figsize=(8, 4))
+    plt.plot(medicion, marker='o', linestyle='-', linewidth=1.5)
+    plt.title("Mediciones del Keithley 2110")
+    plt.xlabel("Número de medición")
+    plt.ylabel("Voltaje [V]")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()          

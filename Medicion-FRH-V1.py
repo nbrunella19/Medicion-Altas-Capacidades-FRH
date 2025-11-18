@@ -39,7 +39,7 @@ def configurar_generador(afg):
     # Usar PULSE (mucho mejor para trigger externo)
     afg.inst.write("SOUR2:FUNC PULS")
     afg.inst.write(f"SOUR2:FREQ {FRECUENCIA}")
-    afg.inst.write("SOUR2:PULS:WIDT 0.001")   # pulso de 1 ms
+    afg.inst.write("SOUR2:PULS:WIDT 0.001")    # pulso de 1 ms
     afg.inst.write("SOUR2:PULS:TRAN 1e-6")     # bordes rápidos (1 us)
 
     # TTL real: 0–5 V

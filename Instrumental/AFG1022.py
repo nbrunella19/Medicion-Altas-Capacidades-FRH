@@ -3,8 +3,8 @@ import time
 
 class TektronixAFG1022:
     """
-    Controlador para el generador de funciones Tektronix AFG1022 mediante PyVISA por USB.
-    Permite configurar ambos canales, frecuencia, amplitud, forma de onda y sincronización.
+    Controlador para el generador de funciones Tektronix AFG1022.
+    Incluye métodos extendidos para generar señales de medición y señales TTL de disparo.
     """
 
     def __init__(self, resource_name=None):
@@ -19,76 +19,71 @@ class TektronixAFG1022:
         self.inst.read_termination = '\n'
         self.inst.timeout = 5000
 
+    # ===================================================
+    # MÉTODOS BÁSICOS
+    # ===================================================
+
     def idn(self):
-        """Devuelve la identificación del instrumento."""
         return self.inst.query("*IDN?")
 
     def reset(self):
-        """Resetea el generador a valores por defecto."""
         self.inst.write("*RST")
         self.inst.write("*CLS")
-        print("Instrumento reseteado.")
+        time.sleep(0.5)
 
-    def configurar_canal(self, canal=1, forma='SIN', frecuencia=1000, amplitud=1.0, offset=0.0):
-        """
-        Configura los parámetros básicos del canal indicado.
-        canal: 1 o 2
-        forma: SIN, SQU, RAMP, PULS, NOIS, DC, USER
-        frecuencia: en Hz
-        amplitud: en Vpp
-        offset: en V
-        """
-        if canal not in [1, 2]:
-            raise ValueError("El canal debe ser 1 o 2.")
-        self.inst.write(f"SOUR{canal}:FUNC {forma}")
-        self.inst.write(f"SOUR{canal}:FREQ {frecuencia}")
-        self.inst.write(f"SOUR{canal}:VOLT {amplitud}")
-        self.inst.write(f"SOUR{canal}:VOLT:OFFS {offset}")
+    def close(self):
+        self.inst.close()
+        self.rm.close()
+
+    # ===================================================
+    # MÉTODOS DE CONFIGURACIÓN DE CANALES
+    # ===================================================
+
+    def modo_independiente(self):
+        """Desacopla los canales."""
+        self.inst.write("SOUR:COUP:FREQ OFF")
+        self.inst.write("SOUR:COUP:AMPL OFF")
+        self.inst.write("SOUR:COUP:PHAS 0")
 
     def activar_salida(self, canal=1, estado=True):
-        """Activa o desactiva la salida de un canal."""
         estado_str = "ON" if estado else "OFF"
         self.inst.write(f"OUTP{canal} {estado_str}")
 
     def sincronizar_canales(self):
-        """
-        Sincroniza los canales para que empiecen al mismo tiempo,
-        sin acoplar frecuencia ni amplitud.
-
-        Este comando alinea las fases internas de los dos canales,
-        pero permite que cada uno mantenga su propia configuración.
-        """
-        # Alinea los generadores internos (ajusta sus relojes de fase)
         self.inst.write("SOUR:PHAS:ALIGN")
 
+    # ===================================================
+    # MÉTODOS ESPECÍFICOS PARA EXPERIMENTO FRH
+    # ===================================================
 
-    def modo_independiente(self):
-        """Desbloquea los canales para configurarlos de manera independiente."""
-        self.inst.write("SOUR:COUP:FREQ OFF")
-        self.inst.write("SOUR:COUP:AMPL OFF")
-        self.inst.write("SOUR:COUP:PHAS 0")
-        
-    def leer_frecuencia(self, canal=1):
-        return float(self.inst.query(f"SOUR{canal}:FREQ?"))
+    def configurar_senal_medida(self, frecuencia, amplitud=1.0, offset=0.5):
+        """
+        Configura el canal 1 como señal cuadrada normal para medir.
+        """
+        self.inst.write("SOUR1:FUNC SQU")
+        self.inst.write(f"SOUR1:FREQ {frecuencia}")
+        self.inst.write(f"SOUR1:VOLT {amplitud}")
+        self.inst.write(f"SOUR1:VOLT:OFFS {offset}")
+        self.inst.write("OUTP1:LOAD INF")  # asegurar amplitud correcta
 
-    def leer_amplitud(self, canal=1):
-        return float(self.inst.query(f"SOUR{canal}:VOLT?"))
+    def configurar_trigger_ttl(self, frecuencia):
+        """
+        Configura canal 2 como fuente de trigger TTL (PULSE, 0–5 V, bordes rápidos).
+        """
+        self.inst.write("SOUR2:FUNC PULS")
+        self.inst.write(f"SOUR2:FREQ {frecuencia}")
+        self.inst.write("SOUR2:PULS:WIDT 0.001")   # pulso de 1 ms
+        self.inst.write("SOUR2:PULS:TRAN 1e-6")     # bordes rápidos
+        self.inst.write("SOUR2:VOLT 5")
+        self.inst.write("SOUR2:VOLT:OFFS 2.5")
+        self.inst.write("OUTP2:LOAD INF")           # 0–5 V reales
 
-    def leer_offset(self, canal=1):
-        return float(self.inst.query(f"SOUR{canal}:VOLT:OFFS?"))
+    def iniciar_salidas(self):
+        """Activa ambos canales luego de la configuración."""
+        self.activar_salida(1, True)
+        self.activar_salida(2, True)
 
-    def leer_forma(self, canal=1):
-        return self.inst.query(f"SOUR{canal}:FUNC?").strip()
-
-    def leer_salida(self, canal=1):
-        return self.inst.query(f"OUTP{canal}?").strip()
-
-    def close(self):
-        """Cierra la conexión con el instrumento."""
-        self.inst.close()
-        self.rm.close()
-
-
+"""
 # Ejemplo de uso:
 
 afg = TektronixAFG1022("USB0::0x0699::0x0353::2234106::INSTR")
@@ -118,3 +113,4 @@ print("  Offset:", afg.leer_offset(2))
 print("  Salida:", afg.leer_salida(2))
 
 afg.close()
+"""

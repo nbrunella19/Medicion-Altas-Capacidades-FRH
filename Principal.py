@@ -52,12 +52,12 @@ while True: ######################################################## BUCLE PRINC
 
             # Limpio pantalla y elijo instrumental
             Funciones_Archivos.limpiar_pantalla()
-            set_u  = Funciones_Archivos.Menu_Instrumental()
+            #set_u  = Funciones_Archivos.Menu_Instrumental()
             
             # Obtengo rutas de archivos de medición y configuración
             Ruta_Medicion_Entrada, Ruta_Medicion_Carga_Descarga, Ruta_archivo_config = Funciones_Archivos.Ruta_de_analisis_nuevo()
             
-            Modo, Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time, Cantidad_Ciclos = Funciones_Archivos.Configuracion()
+            Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time, Cantidad_Ciclos = Funciones_Archivos.Configuracion()
             
             estado_actual = "INICIALIZACION"
             
@@ -67,11 +67,11 @@ while True: ######################################################## BUCLE PRINC
             Funciones_Archivos.limpiar_pantalla()
             
             # Limpio pantalla y elijo instrumental
-            set_u  = Funciones_Archivos.Menu_Instrumental()
+            #set_u  = Funciones_Archivos.Menu_Instrumental()
             
             # Obtengo rutas y configuración ya existentes
             Ruta_Medicion_Entrada, Ruta_Medicion_Carga_Descarga, Ruta_archivo_config, Archivo_Generador, Archivo_Capacitor, Archivo_Config = Funciones_Archivos.Ruta_de_analisis_existente()
-            Modo, Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time = Funciones_Archivos.extraccion_datos(Ruta_archivo_config)
+            Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time = Funciones_Archivos.extraccion_datos(Ruta_archivo_config)
             
             estado_actual = "EXTRACCION"
         
@@ -107,7 +107,7 @@ while True: ######################################################## BUCLE PRINC
             Medicion_Generador=dvm.configurar_y_medir_tension(Cant_Muestras, Sweep_time, Aper_Time)
         
         Funciones_Archivos.Guardar_Medicion(Ruta_Medicion_Entrada,Medicion_Generador)
-        Funciones_Archivos.Guardar_Medicion_Config(Ruta_archivo_config,Modo,Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time)
+        Funciones_Archivos.Guardar_Medicion_Config(Ruta_archivo_config,modo_u,Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time)
         
         input("Cambiar posición de llave para medir la tensión en el capacitor y presionar Enter")      
         
