@@ -6,12 +6,15 @@ import Funciones_Medicion
 import numpy as np
 
 N = 1
-estado_actual = "INICIO"
 muestras_por_trigger = 2000
+
+#estado_actual = "INICIO"
+estado_actual = "INICIO"
 Paso_de_medicion = "GENERADOR"
 ARCHIVO_SALIDA_GEN = "mediciones_generador.txt"
 ARCHIVO_SALIDA_CAP = "mediciones_capacitor.txt"
 Sweep_Time = 0.02
+#Sweep_Time = 0.000104
 
 while True:
     
@@ -25,7 +28,7 @@ while True:
         
         print(Vn_Cx, Vn_Rp, Vn_Tau, Frec, Sweep_time, Cantidad_Ciclos)
         input("Presione Enter para continuar...")
-        estado_actual = "INICIO"
+        estado_actual = "INICIALIZAR"
         
     elif estado_actual == "INICIALIZAR":
         
@@ -42,19 +45,21 @@ while True:
         afg.modo_independiente()
         
         #Canal 1: señal cuadrada 
-        afg.configurar_senal_medida(Frec)
+        afg.configurar_senal_medida(1)
         
         #Canal 2: trigger TTL
-        afg.configurar_trigger_ttl(Frec)
+        afg.configurar_trigger_ttl(1)
         
         #Sincróniza los canales para que empiecen juntos
         afg.sincronizar_canales()
         
         # Configuraciones del multímetro
         # Configurar rango fijo de 1 V   
-        dmm.configurar_dc_range(rango=1)
+        dmm.configurar_dc_range(rango=10)
         dmm.configurar_fast_mode()
         dmm.configurar_trigger_externo(muestras=muestras_por_trigger)
+        
+        estado_actual = "MEDIR"
         
     elif estado_actual == "MEDIR": 
         #Activa las salidas
@@ -89,18 +94,22 @@ while True:
             print(f"Archivo guardado como: {ARCHIVO_SALIDA_CAP}")
             Paso_de_medicion = "GENERADOR"
             estado_actual = "ANALIZAR"
+    
+
         
     elif estado_actual == "ANALIZAR":
         Funciones_Archivos.limpiar_pantalla()
-        V_max, V_max_std = Funciones_Medicion.analizar_senal_cuadrada(medicion_gen)
+        V_max, V_max_std = Funciones_Medicion.Analizar_senal_Generador(medicion_gen)
+        print(f"Tensión máxima del generador cargado: {V_max:.6f} V ± {V_max_std:.6f} V\n")
+
         Cx_vector,slope_vector,intercept_vector,r_value_vector,std_err_vector,Cantidad_ciclos_validos,Cantidad_de_muestras,V_dig = Funciones_Medicion.Procesamiento_Curva(
                                                                                                                                     medicion_cap,                                                                                                                                                 
                                                                                                                                     V_max,
                                                                                                                                     Sweep_Time,
-                                                                                                                                    Vn_Rp,
+                                                                                                                                    Vn_Rp
                                                                                                                                     )
         Cx         = np.mean(Cx_vector)
-        ucx, ucxp  = Funciones_Medicion.Calculo_Incertidumbre(slope_vector,intercept_vector,std_err_vector,Cantidad_ciclos_validos,V_dig,V_max,Vn_Cx,Vn_Rp)
+        ucx, ucxp  = Funciones_Medicion.Calculo_Incertidumbre(slope_vector,Cantidad_ciclos_validos,V_dig,V_max,Vn_Cx,Vn_Rp)
         
         Funciones_Medicion.Mostrar_Resultado(Cx,ucx, ucxp, Vn_Rp)
         

@@ -1,7 +1,4 @@
 ################################## LIBRERIAS ###############################################
-import os
-import json
-import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,7 +9,7 @@ from pathlib import Path
 #############################################################################################
 Extremo_de_ventana_inf = 0.1
 Extremo_de_ventana_sup = 0.9
-R_Cuadrado    = 0.999
+R_Cuadrado    = 0.9
 Cant_Muestras = 10000
 cantidad_de_ciclos = 5
 
@@ -25,7 +22,7 @@ HP3458_Jitter_T     = 1e-10
 HP3458_Accuracy_V   = 14e-6
 HP3458_Offset_V     = 1e-6 
 HP3458_Gain_error_V = 60e-6         # pag 99 sampling with ...
-HP3458_Resolution_V = 1/200000      #pag 51 // 5 dig y medio // Synthesys and Sampling
+HP3458_Resolution_V = 1/200000      # pag 51 // 5 dig y medio // Synthesys and Sampling
 
 
 ################################## Valores de Cables ###########################################
@@ -78,7 +75,7 @@ def analizar_senal_cuadrada(signal: np.ndarray, umbral: float = 0.01):
     umbral_inferior = v_min + umbral * amplitud
 
     # Clasificar valores
-    von_values = signal[signal >= umbral_superior]
+    von_values  = signal[signal >= umbral_superior]
     voff_values = signal[signal <= umbral_inferior]
 
     # Calcular estadísticas
@@ -98,8 +95,49 @@ def analizar_senal_cuadrada(signal: np.ndarray, umbral: float = 0.01):
         
     return  V_max, Gen_std
 ###############################################################################################################################################################
+#########################################################################################################
+
+def Analizar_senal_Generador(Medicion_generador, umbral: float = 0.01):
+    """
+    Analiza una señal cuadrada para obtener los valores promedio y desviación estándar de Von y Voff.
+    """
+    
+    # **AQUÍ ESTÁ LA SOLUCIÓN:** Asegurar que sea un array de NumPy
+    if not isinstance(Medicion_generador, np.ndarray):
+        Medicion_generador_np = np.array(Medicion_generador)
+
+    # Estimar niveles
+    v_max = np.max(Medicion_generador_np)
+    v_min = np.min(Medicion_generador_np)
+    amplitud = v_max - v_min
+
+    # Estimar umbrales
+    umbral_superior = v_max - umbral * amplitud
+    umbral_inferior = v_min + umbral * amplitud
+
+    # Clasificar valores
+    von_values  = Medicion_generador_np[Medicion_generador_np >= umbral_superior]
+    voff_values = Medicion_generador_np[Medicion_generador_np <= umbral_inferior]
+
+    # Calcular estadísticas
+    von_mean = np.mean(von_values)
+    von_std = np.std(von_values)
+
+    voff_mean = np.mean(voff_values)
+    voff_std = np.std(voff_values)
+
+    V_max = von_mean - voff_mean
+
+    
+    if von_std>voff_std:
+        Gen_std=von_std
+    else:
+        Gen_std=voff_std
+        
+    return  V_max, Gen_std
 ###############################################################################################################################################################
-def Procesamiento_CargayDescarga(Ruta_Medicion_Carga_Descarga,Medicion_Capacitor,V_max,Sweep_Time,Rp,Rcablegenerador):
+###############################################################################################################################################################
+def Procesamiento_CargayDescarga(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp,Rcablegenerador):
     """
     Entrada: Ruta del archivo de medición, Vector de muestras, Valor máximo de tensión del generador, Tiempo entre muestras,
               Valor de resistencia patrón, Resistencia del cable del generador.
@@ -167,8 +205,8 @@ def Procesamiento_CargayDescarga(Ruta_Medicion_Carga_Descarga,Medicion_Capacitor
   
     print(muestrasdeinicio)
     print(muestrasdefin)
-    input()
-   
+
+    
     Cantidad_inicios = len(muestrasdeinicio)
     Cantidad_finales = len(muestrasdefin)
     
@@ -184,7 +222,7 @@ def Procesamiento_CargayDescarga(Ruta_Medicion_Carga_Descarga,Medicion_Capacitor
     Num_Muestras_de_Ciclo    =[0]*Cantidad_ciclos 
     #Tiempo_Muestras_de_Ciclo =[0]*Cantidad_ciclos
 
-    Mediciones_leidas = pd.read_csv(Ruta_Medicion_Carga_Descarga, header=None, names=['Tensión'], sep='\s+', skiprows=13)  
+    Mediciones_leidas = pd.read_csv(Ruta_Medicion_Carga_Descarga, header=None, names=['Tensión'], sep='\\s+', skiprows=13)  
     Cantidad_de_muestras= len(Mediciones_leidas)
 
     # Genera el vector de tiempo en función del `timer`
@@ -243,7 +281,7 @@ def Procesamiento_CargayDescarga(Ruta_Medicion_Carga_Descarga,Medicion_Capacitor
 
 ##################################################################################################################################################################
 ##################################################################################################################################################################
-def Procesamiento_Curva(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp):
+def Procesamiento_Curva(Mediciones_capacitor,V_max,Sweep_Time,Rp):
     """
     Entrada: Ruta del archivo de medición, Vector de muestras, Valor máximo de tensión del generador, Tiempo entre muestras,
               Valor de resistencia patrón, Resistencia del cable del generador.
@@ -255,7 +293,6 @@ def Procesamiento_Curva(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp):
     Muestras_Filtradas              = []  
     muestrasdeinicio                = []  # Almacenará los números de muestra del inicio de cada carga
     muestrasdefin                   = []  # Almacenará los números de muestra de final de cada carga
-    Numero_de_Muestras_Filtradas    = []
     slope_vector                    = []   
     intercept_vector                = []
     r_value_vector                  = []
@@ -263,31 +300,25 @@ def Procesamiento_Curva(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp):
     std_err_vector                  = []
     
     V_offset                        = 0.0 
-    R_Cuadrado                      = 0.999
+    R_Cuadrado                      = 0.9
     Indice                          = 0  
     cargando                        = False  # Bandera para identificar si estamos en una carga
     enganche                        = False
     
     V_dig            = V_max* 0.6321205588  
-    valor_inicial    = 0.01 * V_max 
-    valor_final      = 0.99 * V_max  
+    valor_inicial    = 0.1 * V_max 
+    valor_final      = 0.9 * V_max  
     
     print(f"Valor inicial de disparo: {valor_inicial} V")
     print(f"Valor final de disparo: {valor_final} V")
 
-     
-    with open(Ruta_Medicion_Carga_Descarga, 'r') as f:
-        Mediciones = []
-        for linea in f:
-            try:
-                valor = float(linea.strip())
-                Mediciones.append(valor)
-            except ValueError:
-                # Si la línea no puede convertirse, la ignoramos (puede ser texto del encabezado)
-                continue
-    
+       
+    if not isinstance(Mediciones_capacitor, pd.DataFrame):      
+        Mediciones_capacitor_df = pd.DataFrame(Mediciones_capacitor, columns=['Tensión'])
+    else:
+        Mediciones_capacitor_df = Mediciones_capacitor # Si ya es un DF, úsalo directamente
 
-    for i, valor in enumerate(Mediciones, start=1):   
+    for i, valor in enumerate(Mediciones_capacitor_df['Tensión'].values, start=1):   
         
         # Si no fue disparado, no está cargando y el valor es superior al mínimo disparo
         if not enganche and not cargando and valor <= valor_inicial:
@@ -303,13 +334,17 @@ def Procesamiento_Curva(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp):
             muestrasdefin.append(i)
             cargando = False
             enganche = False
-
-   
+ 
     Cantidad_inicios = len(muestrasdeinicio)
     Cantidad_finales = len(muestrasdefin)
     
     #Si la cantidad de inicios y finales fuesen distintos tomaria el de menor valor 'n'
     Cantidad_ciclos  = min(Cantidad_inicios, Cantidad_finales)
+    
+    print(muestrasdeinicio)
+    print(muestrasdefin)
+    
+    input("Presione Enter para continuar...")
     
     #Tomo finalmente los primeros 'n' valores
     muestrasdeinicio = muestrasdeinicio[:Cantidad_ciclos]
@@ -319,38 +354,39 @@ def Procesamiento_Curva(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp):
     Muestras_de_Ciclo_Lin    =[0]*Cantidad_ciclos 
     Num_Muestras_de_Ciclo    =[0]*Cantidad_ciclos 
 
-
-    Mediciones_leidas = pd.read_csv(Ruta_Medicion_Carga_Descarga, header=None, names=['Tensión'], sep='\s+', skiprows=13)  
-    Cantidad_de_muestras= len(Mediciones_leidas)
-
-    # Genera el vector de tiempo en función del `timer`
-    Mediciones_leidas['Tiempo'] = np.arange(0, Cantidad_de_muestras * Sweep_Time, Sweep_Time)
-
-    for i in range(Cantidad_ciclos):
+    #Mediciones_leidas = pd.read_csv(Ruta_Medicion_Carga_Descarga, header=None, names=['Tensión'], sep='\s+', skiprows=13)  
+    Cantidad_de_muestras= len(Mediciones_capacitor_df)
     
-    # Seleccionar el rango de muestras especificado
-        Muestras_Filtradas_aux  = Mediciones_leidas.iloc[muestrasdeinicio[i]:muestrasdefin[i]]
+    # Genera el vector de tiempo en función del `timer`  
+    tiempo_final = (Cantidad_de_muestras - 1) * Sweep_Time
+    Mediciones_capacitor_df['Tiempo'] = np.linspace(
+    start=0, 
+    stop=tiempo_final, 
+    num=Cantidad_de_muestras
+    )
+         
+    for i in range(Cantidad_ciclos):
+        # Usar .loc para asegurar un indexado correcto en Pandas si las muestras
+        # son usadas para seleccionar filas (iloc es mejor para índices enteros)
+        Muestras_Filtradas_aux = Mediciones_capacitor_df.iloc[muestrasdeinicio[i]-1 : muestrasdefin[i]] # Nota: -1 para ajustar el índice si 'start=1' se usó
 
-        # Filtrar los datos seleccionados para que estén entre 0.3V y 0.7V
-        Muestras_Filtradas_aux = Muestras_Filtradas_aux [
+        # Filtrar los datos seleccionados (Necesitas definir Extremo_de_ventana_inf/sup, asumo que están definidos fuera o son constantes)
+        Muestras_Filtradas_aux = Muestras_Filtradas_aux[
             (Muestras_Filtradas_aux['Tensión'] >= Extremo_de_ventana_inf) & (Muestras_Filtradas_aux['Tensión'] <= Extremo_de_ventana_sup)
-            ]  
-        
-        Muestras_de_Ciclo[Indice]      = Muestras_Filtradas_aux['Tensión']
-        Num_Muestras_de_Ciclo[Indice]  = Muestras_Filtradas_aux.index  
-        
-        #Linealización los datos seleccionados
-        Muestras_de_Ciclo_Lin[Indice] = np.log(1 - (Muestras_Filtradas_aux['Tensión']-V_offset) / V_max)
+        ]
 
-        # Calcular la pendiente de la curva linealizada usando una regresión lineal
-        # slope esla inversa negativa de tau
-        # intercept es el valor de y cuando x=0
-        # r_value es el coeficiente de correlación
-        # p_value es el valor p para la hipótesis nula que la pendiente es cero
-        # std_err es la desviación estándar del error de la pendiente
-        # Acá se hace la REGRESION LINEAL
-        slope, intercept, r_value, p_value, std_err= linregress(Muestras_Filtradas_aux['Tiempo'], Muestras_de_Ciclo_Lin[Indice])
-               
+        Muestras_de_Ciclo[Indice] = Muestras_Filtradas_aux['Tensión'].values
+        Num_Muestras_de_Ciclo[Indice] = Muestras_Filtradas_aux.index.values
+
+        # Linealización
+        Muestras_de_Ciclo_Lin[Indice] = np.log(1 - (Muestras_Filtradas_aux['Tensión'] - V_offset) / V_max)
+        
+        # Regresión lineal
+        slope, intercept, r_value, p_value, std_err = linregress(
+            Muestras_Filtradas_aux['Tiempo'], 
+            Muestras_de_Ciclo_Lin[Indice]
+        )          
+              
         # Evalua si la medición es válida según el coeficiente de determinación R^2
         if (r_value)**2 > R_Cuadrado:
 
@@ -360,10 +396,9 @@ def Procesamiento_Curva(Ruta_Medicion_Carga_Descarga,V_max,Sweep_Time,Rp):
             r_value_vector.append(r_value)
             p_value_vector.append(p_value)
             std_err_vector.append(std_err)
-        
+       
     # Obtengo el número de ciclos válidos
     Cantidad_ciclos_validos = len(slope_vector)   
-
     Muestras_Filtradas      = [elemento for sublista in  Muestras_Filtradas  for elemento in sublista]
 
     # Creación del vector de capacidad sabiendo que: C = tau/R y tau = -1/slope  => C = -1/R*slope
@@ -392,14 +427,16 @@ def Calculo_Valor_Medio(Vector):
 ##################################################################################################################################################################
 ##################################################################################################################################################################
 
-def Calculo_Incertidumbre(slope_vector,intercept_vector,std_err_vector,Cantidad_ciclos,V_dig,V_max,Vn_Cx,Vn_Rp):
+def Calculo_Incertidumbre(slope_vector,Cantidad_ciclos,V_dig,V_max,Vn_Cx,Vn_Rp):
 
     slope_promedio     = np.mean(slope_vector)
     slope_desv_est     = np.std(slope_vector)
-    intercept_promedio = np.mean(intercept_vector)
-    std_err_promedio   = np.mean(std_err_vector)
     tau_promedio       = -1 / slope_promedio
-    error_C            = std_err_promedio/ ((slope_promedio**2) * Vn_Rp) 
+    
+    
+    #error_C            = std_err_promedio/ ((slope_promedio**2) * Vn_Rp) 
+    #intercept_promedio = np.mean(intercept_vector)
+    #std_err_promedio   = np.mean(std_err_vector)
     
     # Incertidumbre tipo B (división entre sqrt(3) para distribución rectangular)
     factor_r    =1/np.sqrt(3)
@@ -485,3 +522,4 @@ def Graficar(datos, sweep_time):
     plt.ylabel("Tensión (V)")
     plt.grid(True)
     plt.show()
+

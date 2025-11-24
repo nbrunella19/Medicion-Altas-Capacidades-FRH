@@ -308,3 +308,22 @@ def Graficar_Mediciones(medicion):
     plt.grid(True)
     plt.tight_layout()
     plt.show()          
+    
+##################################################################################################################################################################    
+
+def Cargar_Medicion(ruta_archivo):
+    """
+    Lee un archivo de texto con una medición (un valor por línea)
+    y devuelve una lista de floats.
+    """
+    lista_valores = []
+
+    with open(ruta_archivo, "r") as file:
+        for linea in file:
+            linea = linea.strip()
+            if linea != "":                 # evita líneas vacías
+                lista_valores.append(float(linea))
+
+    return lista_valores
+
+##################################################################################################################################################################
